@@ -12,6 +12,10 @@ hooks/
   notify.sh           # 入力待ち時のデスクトップ通知（macOS / Linux）
   ruff-format.sh      # .py 編集直後に Ruff で自動整形（uv プロジェクト用）
 settings.json         # 汎用パーミッション設定テンプレート
+.github/workflows/
+  claude-review.yml   # 共通PR自動レビュー本体（Reusable Workflow）
+templates/
+  claude-review.yml   # 各リポジトリへ置く呼び出しワークフローのテンプレート
 ```
 
 ## 使い方
@@ -76,3 +80,49 @@ Claude が `.py` ファイルを編集するたびに `ruff format` + `ruff chec
   }
 }
 ```
+
+## PR 自動レビューの共通化
+
+[Claude Code GitHub Actions](https://github.com/anthropics/claude-code-action) を使った PR 自動レビューを、Reusable Workflow として 1 か所に集約する。レビュー本体は `.github/workflows/claude-review.yml`（このリポジトリ）に置き、各リポジトリは数行の呼び出しワークフローを置くだけで利用できる。
+
+### 導入手順（利用する各リポジトリ側）
+
+1. `templates/claude-review.yml` を、利用したいリポジトリの `.github/workflows/claude-review.yml` としてコピーする。
+
+   ```yaml
+   name: Claude Auto Review
+   on:
+     pull_request:
+       types: [opened, synchronize, reopened]
+   jobs:
+     review:
+       uses: Kaaaaazuya/claude-config/.github/workflows/claude-review.yml@main
+       secrets:
+         anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+   ```
+
+2. 利用するリポジトリに `ANTHROPIC_API_KEY` を Secret として登録する（Settings → Secrets and variables → Actions）。
+3. （任意）`CLAUDE.md` と `docs/review-rules.md` にプロジェクト固有のレビュー基準を書いておくと、レビュー内容に反映される。
+
+### 上書きできる入力
+
+| 入力 | 既定値 | 説明 |
+| --- | --- | --- |
+| `max_turns` | `12` | エージェントの最大会話ターン数（コスト上限） |
+| `timeout_minutes` | `15` | ジョブのタイムアウト（分） |
+
+上書きする場合は呼び出し側に `with:` を追加する。
+
+```yaml
+   review:
+     uses: Kaaaaazuya/claude-config/.github/workflows/claude-review.yml@main
+     with:
+       max_turns: 8
+     secrets:
+       anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+### 注意
+
+- 本体を更新したら全利用リポジトリへ即時反映される（`@main` 参照のため）。安定運用したい場合は `@v1` などのタグ参照に切り替える。
+- このリポジトリが Private の場合、Organization の Actions 設定で他リポジトリからの参照を許可する必要がある（Public なら不要）。

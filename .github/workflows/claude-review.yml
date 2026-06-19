@@ -1,0 +1,74 @@
+name: Claude Auto Review (Reusable)
+
+# 各リポジトリから `uses:` で呼び出す共通レビューワークフロー本体。
+# 呼び出し側は .github/workflows/claude-review.yml（テンプレートは templates/ 配下）を参照。
+on:
+  workflow_call:
+    inputs:
+      max_turns:
+        description: エージェントの最大会話ターン数（コスト上限）
+        type: number
+        default: 12
+      timeout_minutes:
+        description: ジョブのタイムアウト（分）
+        type: number
+        default: 15
+    secrets:
+      anthropic_api_key:
+        description: Anthropic API キー
+        required: true
+
+# 同一PRへ新コミットが来たら古いレビューをキャンセル（二重課金防止）
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: diff
+        run: |
+          echo "files=$(gh pr diff ${{ github.event.pull_request.number }} --name-only | tr '\n' ',')" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.anthropic_api_key }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            CHANGED FILES: ${{ steps.diff.outputs.files }}
+
+            あなたはこのリポジトリのシニアレビュアーです。
+            CLAUDE.md と docs/review-rules.md のレビュー基準に従い、
+            以下の観点でPRをレビューしてください。
+
+            1. バグ・ランタイムエラーの可能性
+            2. セキュリティ上の懸念（OWASP Top 10）
+            3. パフォーマンス・N+1・不要なアロケーション
+            4. テストの欠落
+            5. プロジェクト固有のドメインルール違反
+
+            出力形式:
+            - 重大な問題は `mcp__github_inline_comment__create_inline_comment`
+              で該当行にインラインコメントを残す
+            - 全体所感・サマリは `gh pr comment` でPRコメントとして投稿
+            - 判定結果を末尾に `VERDICT: APPROVE|REQUEST_CHANGES|COMMENT` の形式で明記
+
+          claude_args: |
+            --max-turns ${{ inputs.max_turns }}
+            --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git log:*),Bash(git show:*)"

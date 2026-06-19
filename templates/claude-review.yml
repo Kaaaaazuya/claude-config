@@ -1,0 +1,17 @@
+# 各リポジトリの .github/workflows/claude-review.yml としてコピーする呼び出しテンプレート。
+# レビュー本体は Kaaaaazuya/claude-config の Reusable Workflow を参照する。
+name: Claude Auto Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    uses: Kaaaaazuya/claude-config/.github/workflows/claude-review.yml@main
+    secrets:
+      anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+    # 既定値を変えたい場合のみコメントを外して上書き
+    # with:
+    #   max_turns: 12
+    #   timeout_minutes: 15
