@@ -14,8 +14,10 @@ hooks/
 settings.json         # 汎用パーミッション設定テンプレート
 .github/workflows/
   claude-review.yml   # 共通PR自動レビュー本体（Reusable Workflow）
+  lint.yml            # YAML を yamllint + actionlint で検証する CI
 templates/
   claude-review.yml   # 各リポジトリへ置く呼び出しワークフローのテンプレート
+.yamllint.yml         # yamllint 設定（Actions 向けに緩め）
 ```
 
 ## 使い方

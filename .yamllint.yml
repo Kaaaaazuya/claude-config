@@ -1,0 +1,14 @@
+# yamllint 設定。GitHub Actions ワークフロー向けに緩めの規則を採用。
+extends: default
+
+rules:
+  line-length: disable
+  document-start: disable
+  # コメントアウトしたサンプル行（templates/）でのノイズを避ける
+  comments-indentation: disable
+  comments:
+    min-spaces-from-content: 1
+  truthy:
+    # GitHub Actions の `on:` を真偽値と誤検知させない
+    allowed-values: ["true", "false"]
+    check-keys: false
