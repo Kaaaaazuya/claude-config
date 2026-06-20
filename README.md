@@ -84,7 +84,7 @@ Conventional Commits 1.0.0 準拠のコミットを対話的に作成する。
 
 ### `/blog-draft`
 
-`logs/retro-candidates.md` の候補を Astro + MDX 形式のブログ下書きに変換する。Astro の frontmatter（`title` / `description` / `pubDate` / `tags` / `draft: true`）付きで `src/content/blog/` に出力。「ブログ書いて」「下書き作って」でも発動。
+`logs/retro-candidates.md` の候補を MDX 形式のブログ下書きに変換する。`drafts/{YYYY-MM-DD}-{slug}.mdx` に `draft: true` で保存。ブログ基盤が決まったら frontmatter を調整して移行する想定。「ブログ書いて」「下書き作って」でも発動。
 
 ## フックの説明
 
