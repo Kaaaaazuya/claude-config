@@ -6,18 +6,29 @@
 
 ```
 skills/
-  commit/SKILL.md     # Conventional Commits 準拠コミット
-  allowlist/SKILL.md  # 許可コマンドの抽出・管理
+  commit/SKILL.md        # Conventional Commits 準拠コミット
+  allowlist/SKILL.md     # 許可コマンドの抽出・管理
+  grill-me/SKILL.md      # 実装前の設計インタビュー
+  hook-status/SKILL.md   # フック稼働・ログ蓄積状況の診断
+  log-analyzer/SKILL.md  # ログ分析・繰り返しパターン抽出
+  retro-codify/SKILL.md  # セッション振り返りと学びの言語化
+  skill-builder/SKILL.md # 候補から draft スキルを生成
 hooks/
-  notify.sh           # 入力待ち時のデスクトップ通知（macOS / Linux）
-  ruff-format.sh      # .py 編集直後に Ruff で自動整形（uv プロジェクト用）
-settings.json         # 汎用パーミッション設定テンプレート
+  pre-tool-use.sh        # 破壊的 git コマンドをブロック（PreToolUse）
+  notify.sh              # 入力待ち時のデスクトップ通知（Notification）
+  ruff-format.sh         # .py 編集直後に Ruff で自動整形（PostToolUse）
+  _common.py             # フック共通のパス解決処理
+  tool_logger.py         # 全ツール操作を tool-audit.jsonl に記録（PostToolUse）
+  log_reminder.py        # N 回ごとにログ更新を促す（UserPromptSubmit）
+tests/                   # hooks/ の Python フックに対する pytest テスト
+settings.json            # 汎用パーミッション設定テンプレート
 .github/workflows/
-  claude-review.yml   # 共通PR自動レビュー本体（Reusable Workflow）
-  lint.yml            # YAML を yamllint + actionlint で検証する CI
+  claude-review.yml      # 共通PR自動レビュー本体（Reusable Workflow）
+  lint.yml               # YAML を yamllint + actionlint で検証する CI
 templates/
-  claude-review.yml   # 各リポジトリへ置く呼び出しワークフローのテンプレート
-.yamllint.yml         # yamllint 設定（Actions 向けに緩め）
+  claude-review.yml      # 各リポジトリへ置く呼び出しワークフローのテンプレート
+.yamllint.yml            # yamllint 設定（Actions 向けに緩め）
+pyproject.toml           # uv プロジェクト設定（pytest / ruff / pyyaml）
 ```
 
 ## 使い方
@@ -55,6 +66,22 @@ Conventional Commits 1.0.0 準拠のコミットを対話的に作成する。
 
 直近の作業で実行した Bash コマンドのうち副作用のないものを抽出し、`.claude/settings.json` の `permissions.allow` に追記する。ユーザー確認後にのみ書き込む。
 
+### `/hook-status`
+
+フックスクリプトの存在・ログ蓄積状況・settings.json の設定を診断し、Phase 判定（Phase 1 正常稼働 / Phase 2 未実装など）を出力する。
+
+### `/log-analyzer`
+
+`logs/tool-audit.jsonl` を集計し、繰り返しパターン・エラー傾向・スキル化候補を抽出してレポートを生成する。「ログ分析して」「パターン調べて」でも自律発動。
+
+### `/retro`（retro-codify）
+
+セッション終了前に振り返りを行い、設計判断・問題解決・落とし穴など再利用可能な学びを言語化して `logs/retro-candidates.md` に追記する。スキルを自動生成せず候補提示にとどめる。
+
+### `/skill-builder`
+
+`logs/skill-candidates.json`（機械的検出）と `logs/retro-candidates.md`（意味的抽出）を入力に、人間が選んだパターンを draft 状態の `SKILL.md` + `meta.json` として生成する。
+
 ## フックの説明
 
 ### `notify.sh`（Notification フック）
@@ -79,6 +106,32 @@ Claude が `.py` ファイルを編集するたびに `ruff format` + `ruff chec
 {
   "hooks": {
     "PostToolUse": [{ "matcher": "Edit|Write|MultiEdit", "hooks": [{ "type": "command", "command": ".claude/hooks/ruff-format.sh", "async": true }] }]
+  }
+}
+```
+
+### `tool_logger.py`（PostToolUse フック）
+
+全ツール操作（Bash / Edit / Write / Read）を `logs/tool-audit.jsonl` に追記する。ログ分析・スキル候補抽出の主データソース。
+
+**設定例**（`.claude/settings.json`）:
+```json
+{
+  "hooks": {
+    "PostToolUse": [{ "matcher": "Bash|Edit|Write|Read", "hooks": [{ "type": "command", "command": ".claude/hooks/tool_logger.py" }] }]
+  }
+}
+```
+
+### `log_reminder.py`（UserPromptSubmit フック）
+
+プロンプトが N 回（既定: 5 回）送られるごとに、`logs/session-log.md` の更新をセッションコンテキストに注入する。
+
+**設定例**（`.claude/settings.json`）:
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": ".claude/hooks/log_reminder.py" }] }]
   }
 }
 ```
