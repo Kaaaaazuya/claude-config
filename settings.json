@@ -46,6 +46,27 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/tool_logger.py"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/log_reminder.py"
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "hooks": [
