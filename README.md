@@ -82,6 +82,10 @@ Conventional Commits 1.0.0 準拠のコミットを対話的に作成する。
 
 `logs/skill-candidates.json`（機械的検出）と `logs/retro-candidates.md`（意味的抽出）を入力に、人間が選んだパターンを draft 状態の `SKILL.md` + `meta.json` として生成する。
 
+### `/session-post`
+
+ログ集計 → 学び整理 → MDX 下書き生成をワンコマンドで実行するパイプライン。セッション終了後に実行するだけで `drafts/{date}-{slug}.mdx` が生成される。途中の確認はタイトル・slug の1回のみ。内部で `log-analyzer` / `retro-codify` / `blog-draft` の処理を順に実行する。
+
 ### `/blog-draft`
 
 `logs/retro-candidates.md` の候補を MDX 形式のブログ下書きに変換する。`drafts/{YYYY-MM-DD}-{slug}.mdx` に `draft: true` で保存。ブログ基盤が決まったら frontmatter を調整して移行する想定。「ブログ書いて」「下書き作って」でも発動。
