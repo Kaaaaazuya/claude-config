@@ -14,6 +14,7 @@ skills/
   retro-codify/SKILL.md  # セッション振り返りと学びの言語化
   skill-builder/SKILL.md # 候補から draft スキルを生成
   tdd-cycle/SKILL.md     # TDD→レビュー→カバレッジ→ドキュメント更新のフルサイクル
+  deploy-config/SKILL.md # skills・agentsを~/.claude/にデプロイ
   blog-draft/SKILL.md    # 振り返り候補から MDX ブログ下書きを生成
   session-post/SKILL.md  # ログ集計→学び整理→MDX 生成パイプライン
   sync-docs/SKILL.md     # ドキュメントをコードの実態に合わせて最新化
@@ -94,6 +95,10 @@ Conventional Commits 1.0.0 準拠のコミットを対話的に作成する。
 ### `/session-post`
 
 ログ集計 → 学び整理 → MDX 下書き生成をワンコマンドで実行するパイプライン。セッション終了後に実行するだけで `drafts/{date}-{slug}.mdx` が生成される。途中の確認はタイトル・slug の1回のみ。内部で `log-analyzer` / `retro-codify` / `blog-draft` の処理を順に実行する。
+
+### `/deploy-config`
+
+`~/local/claude-config` の skills・agents を `~/.claude/` にコピーして全プロジェクトで有効化する。差分を確認してからユーザー承認後にデプロイする。hooks と settings.json は自動デプロイしない。
 
 ### `/tdd-cycle`
 
