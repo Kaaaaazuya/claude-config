@@ -13,6 +13,7 @@ skills/
   log-analyzer/SKILL.md  # ログ分析・繰り返しパターン抽出
   retro-codify/SKILL.md  # セッション振り返りと学びの言語化
   skill-builder/SKILL.md # 候補から draft スキルを生成
+  tdd-cycle/SKILL.md     # TDD→レビュー→カバレッジ→ドキュメント更新のフルサイクル
   blog-draft/SKILL.md    # 振り返り候補から MDX ブログ下書きを生成
   session-post/SKILL.md  # ログ集計→学び整理→MDX 生成パイプライン
   sync-docs/SKILL.md     # ドキュメントをコードの実態に合わせて最新化
@@ -93,6 +94,10 @@ Conventional Commits 1.0.0 準拠のコミットを対話的に作成する。
 ### `/session-post`
 
 ログ集計 → 学び整理 → MDX 下書き生成をワンコマンドで実行するパイプライン。セッション終了後に実行するだけで `drafts/{date}-{slug}.mdx` が生成される。途中の確認はタイトル・slug の1回のみ。内部で `log-analyzer` / `retro-codify` / `blog-draft` の処理を順に実行する。
+
+### `/tdd-cycle`
+
+TDD → コードレビュー → 修正 → カバレッジ計測 → ドキュメント更新のフルサイクルを実行する。テストフレームワーク（pytest / jest / vitest / cargo test / go test）をプロジェクト設定から自動検出し、カバレッジはテストライブラリ付属のレポーターを使う。内部で `code-reviewer` subagent と `sync-docs` を呼び出す。
 
 ### `/sync-docs`
 
