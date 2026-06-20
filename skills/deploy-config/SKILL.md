@@ -37,7 +37,25 @@ description: >-
    ls -la ~/.claude/CLAUDE.md
    ```
 
-3. **デプロイ結果を報告する**
+3. **PR を作成する**
+
+   `main` ブランチに未プッシュのコミットがあれば、feature ブランチを切って PR を作成する。
+
+   ```bash
+   # 未プッシュコミットの確認
+   git -C ~/local/claude-config log origin/main..HEAD --oneline
+   ```
+
+   未プッシュコミットがある場合:
+
+   a. `feature/deploy-YYYYMMDD` ブランチを作成してコミットを移す
+   b. `gh pr create` で PR を作成する。タイトル・本文は変更内容から生成する
+   c. PR の URL をユーザーに提示する
+   d. **マージはしない**。レビュー・マージはユーザーが行う
+
+   未プッシュコミットがない場合はスキップする。
+
+4. **デプロイ結果を報告する**
 
    ```
    ## deploy-config 完了
@@ -45,6 +63,7 @@ description: >-
    デプロイ済みスキル: X 個
    デプロイ済みエージェント: X 個
    スキップ: CLAUDE.md（シムリンク管理）
+   PR: <URL>（またはスキップ）
    ```
 
 ## 注意
