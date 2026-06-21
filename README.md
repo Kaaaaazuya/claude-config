@@ -32,8 +32,9 @@ hooks/
 tests/                   # hooks/ の Python フックに対する pytest テスト
 settings.json            # 汎用パーミッション設定テンプレート
 .github/workflows/
-  claude-review.yml      # 共通PR自動レビュー本体（Reusable Workflow）
-  lint.yml               # YAML を yamllint + actionlint で検証する CI
+  claude-review.yml           # 共通PR自動レビュー本体（Reusable Workflow）
+  claude-gemini-response.yml  # Gemini レビューへの Claude 自動対応
+  lint.yml                    # YAML を yamllint + actionlint で検証する CI
 templates/
   claude-review.yml      # 各リポジトリへ置く呼び出しワークフローのテンプレート
 .yamllint.yml            # yamllint 設定（Actions 向けに緩め）
@@ -233,3 +234,62 @@ Claude が `.py` ファイルを編集するたびに `ruff format` + `ruff chec
 
 - 本体を更新したら全利用リポジトリへ即時反映される（`@main` 参照のため）。安定運用したい場合は `@v1` などのタグ参照に切り替える。
 - このリポジトリが Private の場合、Organization の Actions 設定で他リポジトリからの参照を許可する必要がある（Public なら不要）。
+
+## Gemini レビューへの Claude 自動対応
+
+Gemini Code Assist がレビューを投稿したとき、Claude が自動でコメントを評価・コード修正・返信・スレッド解決を行うワークフロー。
+
+### 仕組み
+
+```
+Gemini がレビューを submit
+  └─ pull_request_review トリガー
+       └─ claude-gemini-response.yml 起動
+            ├─ レビューコメントを取得（GitHub API）
+            ├─ 各コメントを評価
+            │    ├─ 妥当 → コードを修正してコミット・プッシュ
+            │    └─ 意図的 → 修正しない
+            ├─ 各コメントに返信（in_reply_to）
+            └─ 全スレッドを Resolved（GraphQL）
+```
+
+### 導入手順（利用する各リポジトリ側）
+
+1. **ワークフローファイルをコピーする**
+
+   `.github/workflows/claude-gemini-response.yml` をコピーして配置する。
+   `REPO` や `max_turns` などの値はそのまま使える（`github.repository` で自動解決）。
+
+   ```bash
+   mkdir -p .github/workflows
+   curl -o .github/workflows/claude-gemini-response.yml \
+     https://raw.githubusercontent.com/Kaaaaazuya/claude-config/main/.github/workflows/claude-gemini-response.yml
+   ```
+
+2. **`ANTHROPIC_API_KEY` シークレットを登録する**
+
+   GitHub リポジトリの Settings → Secrets and variables → Actions → New repository secret
+
+   ```bash
+   # gh CLI で登録する場合
+   gh secret set ANTHROPIC_API_KEY --repo <owner>/<repo>
+   ```
+
+3. **Gemini Code Assist を有効にする**
+
+   対象リポジトリで Gemini Code Assist GitHub App をインストール済みであること。
+   Gemini がレビューを投稿すると、このワークフローが自動起動する。
+
+### このリポジトリ自体への適用
+
+このリポジトリにも `claude-gemini-response.yml` が配置済み。`ANTHROPIC_API_KEY` シークレットを設定するだけで有効になる。
+
+```bash
+gh secret set ANTHROPIC_API_KEY --repo Kaaaaazuya/claude-config
+```
+
+### 注意
+
+- Draft PR では動作しない（`pull_request.draft == false` 条件のため）。
+- `gemini-code-assist[bot]` 以外のレビュアーには反応しない。
+- Claude による修正コミットは PR ブランチに直接プッシュされる（`contents: write` 権限が必要）。

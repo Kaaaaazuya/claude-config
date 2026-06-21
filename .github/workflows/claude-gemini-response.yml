@@ -1,0 +1,91 @@
+name: Claude Responds to Gemini Review
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  respond:
+    # Gemini Code Assist のレビューのみ対象
+    if: github.event.review.user.login == 'gemini-code-assist[bot]' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            REVIEW ID: ${{ github.event.review.id }}
+
+            Gemini Code Assist が PR #${{ github.event.pull_request.number }} にレビューを投稿しました。
+            以下の手順で対応してください。
+
+            ## 手順
+
+            1. **レビューコメントを取得する**
+               ```
+               gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments
+               ```
+               Gemini からのコメント（`user.login` が `gemini-code-assist[bot]`）のみを対象にする。
+
+            2. **各コメントを評価する**
+               - 指摘が正当かどうか判断する
+               - 正当な場合: 該当コードを修正する
+               - 意図的な実装の場合: 修正しない（理由を返信で説明）
+
+            3. **コードを修正した場合**
+               - 変更をコミット・プッシュする（コミットメッセージは Conventional Commits 形式）
+               - コミットフッターに `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` を付ける
+
+            4. **各コメントに返信する**
+               対応した場合:
+               ```
+               gh api repos/${{ github.repository }}/pulls/comments/{comment_id}/replies \
+                 -f body="対応しました。{修正内容の説明}"
+               ```
+               対応しない場合:
+               ```
+               gh api repos/${{ github.repository }}/pulls/comments/{comment_id}/replies \
+                 -f body="この実装は意図的です。{理由}"
+               ```
+
+            5. **全スレッドを Resolved にする**
+               GraphQL で各スレッドを resolve する:
+               ```
+               gh api graphql -f query='
+                 mutation {
+                   resolveReviewThread(input: {threadId: "{thread_id}"}) {
+                     thread { isResolved }
+                   }
+                 }
+               '
+               ```
+               スレッド ID は以下で取得できる:
+               ```
+               gh api graphql -f query='
+                 query {
+                   repository(owner: "{owner}", name: "{name}") {
+                     pullRequest(number: ${{ github.event.pull_request.number }}) {
+                       reviewThreads(first: 50) {
+                         nodes { id isResolved }
+                       }
+                     }
+                   }
+                 }
+               '
+               ```
+
+          claude_args: --max-turns 20 --allowedTools "Read,Edit,Write,Bash(git *),Bash(gh api *),Bash(gh pr *)"
