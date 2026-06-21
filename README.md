@@ -13,6 +13,8 @@ skills/
   log-analyzer/SKILL.md  # ログ分析・繰り返しパターン抽出
   retro-codify/SKILL.md  # セッション振り返りと学びの言語化
   skill-builder/SKILL.md # 候補から draft スキルを生成
+  tdd-cycle/SKILL.md     # TDD→レビュー→カバレッジ→ドキュメント更新のフルサイクル
+  deploy-config/SKILL.md # skills・agentsを~/.claude/にデプロイ
   blog-draft/SKILL.md    # 振り返り候補から MDX ブログ下書きを生成
   session-post/SKILL.md  # ログ集計→学び整理→MDX 生成パイプライン
   sync-docs/SKILL.md     # ドキュメントをコードの実態に合わせて最新化
@@ -30,8 +32,9 @@ hooks/
 tests/                   # hooks/ の Python フックに対する pytest テスト
 settings.json            # 汎用パーミッション設定テンプレート
 .github/workflows/
-  claude-review.yml      # 共通PR自動レビュー本体（Reusable Workflow）
-  lint.yml               # YAML を yamllint + actionlint で検証する CI
+  claude-review.yml           # 共通PR自動レビュー本体（Reusable Workflow）
+  claude-gemini-response.yml  # Gemini レビューへの Claude 自動対応
+  lint.yml                    # YAML を yamllint + actionlint で検証する CI
 templates/
   claude-review.yml      # 各リポジトリへ置く呼び出しワークフローのテンプレート
 .yamllint.yml            # yamllint 設定（Actions 向けに緩め）
@@ -93,6 +96,14 @@ Conventional Commits 1.0.0 準拠のコミットを対話的に作成する。
 ### `/session-post`
 
 ログ集計 → 学び整理 → MDX 下書き生成をワンコマンドで実行するパイプライン。セッション終了後に実行するだけで `drafts/{date}-{slug}.mdx` が生成される。途中の確認はタイトル・slug の1回のみ。内部で `log-analyzer` / `retro-codify` / `blog-draft` の処理を順に実行する。
+
+### `/deploy-config`
+
+`~/local/claude-config` の skills・agents を `~/.claude/` にコピーして全プロジェクトで有効化する。差分を確認してからユーザー承認後にデプロイする。hooks と settings.json は自動デプロイしない。
+
+### `/tdd-cycle`
+
+TDD → コードレビュー → 修正 → カバレッジ計測 → ドキュメント更新のフルサイクルを実行する。テストフレームワーク（pytest / jest / vitest / cargo test / go test）をプロジェクト設定から自動検出し、カバレッジはテストライブラリ付属のレポーターを使う。内部で `code-reviewer` subagent と `sync-docs` を呼び出す。
 
 ### `/sync-docs`
 
@@ -223,3 +234,64 @@ Claude が `.py` ファイルを編集するたびに `ruff format` + `ruff chec
 
 - 本体を更新したら全利用リポジトリへ即時反映される（`@main` 参照のため）。安定運用したい場合は `@v1` などのタグ参照に切り替える。
 - このリポジトリが Private の場合、Organization の Actions 設定で他リポジトリからの参照を許可する必要がある（Public なら不要）。
+
+## Gemini レビューへの Claude 自動対応
+
+Gemini Code Assist がレビューを投稿したとき、Claude が自動でコメントを評価・コード修正・返信・スレッド解決を行うワークフロー。
+
+### 仕組み
+
+```
+Gemini がレビューを submit
+  └─ pull_request_review トリガー
+       └─ claude-gemini-response.yml 起動
+            ├─ レビューコメントを取得（GitHub API）
+            ├─ 各コメントを評価
+            │    ├─ 妥当 → コードを修正してコミット・プッシュ
+            │    └─ 意図的 → 修正しない
+            ├─ 各コメントに返信（in_reply_to）
+            └─ 全スレッドを Resolved（GraphQL）
+```
+
+### 導入手順（利用する各リポジトリ側）
+
+1. **ワークフローファイルをコピーする**
+
+   `.github/workflows/claude-gemini-response.yml` をコピーして配置する。
+   `REPO` や `max_turns` などの値はそのまま使える（`github.repository` で自動解決）。
+
+   ```bash
+   mkdir -p .github/workflows
+   curl -o .github/workflows/claude-gemini-response.yml \
+     https://raw.githubusercontent.com/Kaaaaazuya/claude-config/main/.github/workflows/claude-gemini-response.yml
+   ```
+
+2. **`ANTHROPIC_API_KEY` シークレットを登録する**
+
+   GitHub リポジトリの Settings → Secrets and variables → Actions → New repository secret
+
+   ```bash
+   # gh CLI で登録する場合
+   gh secret set ANTHROPIC_API_KEY --repo <owner>/<repo>
+   ```
+
+3. **Gemini Code Assist を有効にする**
+
+   対象リポジトリで Gemini Code Assist GitHub App をインストール済みであること。
+   Gemini がレビューを投稿すると、このワークフローが自動起動する。
+
+### このリポジトリ自体への適用
+
+このリポジトリにも `claude-gemini-response.yml` が配置済み。`ANTHROPIC_API_KEY` シークレットを設定するだけで有効になる。
+
+```bash
+gh secret set ANTHROPIC_API_KEY --repo Kaaaaazuya/claude-config
+```
+
+### 注意
+
+- Draft PR では動作しない（`pull_request.draft != true` 条件のため）。
+- `gemini-code-assist[bot]` 以外のレビュアーには反応しない。
+- Gemini が Approve のみ（インラインコメントなし・レビュー本体も空）の場合もトリガーされるが、コメントが 0 件なら Claude は何もせず終了する。
+- Claude による修正コミットは PR ブランチに直接プッシュされる（`contents: write` 権限が必要）。
+- コピー先リポジトリで Actions に `contents: write` と `pull-requests: write` が付与されていることを確認する（Organization によっては制限されていることがある。Settings → Actions → General → Workflow permissions で「Read and write permissions」を選択）。

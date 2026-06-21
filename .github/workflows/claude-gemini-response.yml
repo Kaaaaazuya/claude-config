@@ -1,0 +1,116 @@
+name: Claude Responds to Gemini Review
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  respond:
+    # Gemini Code Assist のレビューのみ対象（Approve のみでも起動するが手順 1 でコメントがなければ何もしない）
+    if: github.event.review.user.login == 'gemini-code-assist[bot]' && github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            REVIEW ID: ${{ github.event.review.id }}
+
+            Gemini Code Assist が PR #${{ github.event.pull_request.number }} にレビューを投稿しました。
+            以下の手順で対応してください。
+
+            ## 手順
+
+            1. **レビュー内容を取得する**
+
+               レビュー本体（総評）を取得する:
+               ```
+               gh api repos/${{ github.repository }}/pulls/reviews/${{ github.event.review.id }}
+               ```
+
+               インラインコメントを取得する:
+               ```
+               gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments
+               ```
+               `user.login` が `gemini-code-assist[bot]` のコメントのみを対象にする。
+               コメントが 0 件かつレビュー本体も空の場合は何もせず終了する。
+
+            2. **各コメントを評価する**
+               - 指摘が正当かどうか判断する
+               - 正当な場合: 該当コードを修正する
+               - 意図的な実装の場合: 修正しない（理由を返信で説明）
+
+            3. **コードを修正した場合**
+               - 変更をコミット・プッシュする（コミットメッセージは Conventional Commits 形式）
+               - コミットフッターに `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` を付ける
+               ```
+               git add -A
+               git commit -m "fix: <修正内容>\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+               git push origin HEAD
+               ```
+
+            4. **各コメントに返信する**
+               対応した場合:
+               ```
+               gh api repos/${{ github.repository }}/pulls/comments/<comment_id>/replies \
+                 -f body="対応しました。<修正内容の説明>"
+               ```
+               対応しない場合:
+               ```
+               gh api repos/${{ github.repository }}/pulls/comments/<comment_id>/replies \
+                 -f body="この実装は意図的です。<理由>"
+               ```
+               `<comment_id>` は手順 1 で取得した各コメントの `id` フィールドの値を使うこと。
+
+            5. **全スレッドを Resolved にする**
+
+               まず owner と name を取得する:
+               ```
+               gh repo view ${{ github.repository }} --json owner,name
+               ```
+
+               スレッド ID を取得する（取得した owner と name を使う）:
+               ```
+               gh api graphql -F owner=<owner> -F name=<name> -F pr=${{ github.event.pull_request.number }} -f query='
+                 query($owner: String!, $name: String!, $pr: Int!) {
+                   repository(owner: $owner, name: $name) {
+                     pullRequest(number: $pr) {
+                       reviewThreads(first: 50) {
+                         nodes { id isResolved }
+                       }
+                     }
+                   }
+                 }
+               '
+               ```
+
+               未解決のスレッドをそれぞれ resolve する（`<thread_id>` を各ノードの `id` に置き換える）:
+               ```
+               gh api graphql -F threadId=<thread_id> -f query='
+                 mutation($threadId: ID!) {
+                   resolveReviewThread(input: {threadId: $threadId}) {
+                     thread { isResolved }
+                   }
+                 }
+               '
+               ```
+
+          claude_args: >-
+            --max-turns 20
+            --allowedTools "Read,Edit,Write,
+            Bash(git add *),Bash(git commit *),Bash(git push origin HEAD),
+            Bash(gh api repos/* ),Bash(gh api graphql *),Bash(gh repo view *),
+            Bash(gh pr view *)"

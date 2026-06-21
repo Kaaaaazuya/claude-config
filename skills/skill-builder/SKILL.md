@@ -42,6 +42,24 @@ description: |
 
 6. CLAUDE.md の「利用可能なスキル」テーブルに **(draft) タグ付きで** 追記提案する
 
+7. **claude-config リポジトリに PR を作成する:**
+
+   ```
+   CLAUDE_CONFIG_REPO=~/local/claude-config
+   ```
+
+   以下の手順で実行する:
+
+   a. `$CLAUDE_CONFIG_REPO` に移動し、`main` ブランチが最新であることを確認する
+   b. `feature/skill-{name}` ブランチを作成してチェックアウト
+   c. 生成した `SKILL.md`（と `meta.json`）を `$CLAUDE_CONFIG_REPO/skills/{name}/` にコピー
+   d. コミット（メッセージ例: `feat(skills): {name}スキルを追加`）
+   e. `gh pr create` で PR を作成する。タイトル・本文はスキルの description と手順概要から生成する
+   f. PR の URL をユーザーに提示する
+   g. **マージはしない**。レビュー・マージはユーザーが行う
+
+   > claude-config リポジトリが見つからない場合はスキップしてその旨を伝える。
+
 ## 品質チェック（生成前に確認）
 
 - description は「いつ発動するか」が明確か

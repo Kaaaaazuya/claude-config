@@ -42,7 +42,20 @@ When your changes create orphans:
 
 The test: Every changed line should trace directly to the user's request.
 
-## 4. Goal-Driven Execution
+## 4. Implementation Workflow
+
+**Use `/tdd-cycle` when implementing features or fixing bugs.**
+
+`/tdd-cycle` covers: test → implement → code review (subagent) → coverage → docs update.
+
+Skip it only for:
+- Trivial one-liners (typo fix, rename, log line)
+- Pure refactoring with no behavior change
+- Docs-only changes
+
+When skipping, still verify manually: run tests and confirm they pass before finishing.
+
+## 5. Goal-Driven Execution
 
 **Define success criteria. Loop until verified.**
 
