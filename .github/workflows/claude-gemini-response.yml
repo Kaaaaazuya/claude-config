@@ -6,14 +6,13 @@ on:
 
 jobs:
   respond:
-    # Gemini Code Assist のレビューのみ対象
-    if: github.event.review.user.login == 'gemini-code-assist[bot]' && github.event.pull_request.draft == false
+    # Gemini Code Assist のレビューのみ対象（Approve のみでも起動するが手順 1 でコメントがなければ何もしない）
+    if: github.event.review.user.login == 'gemini-code-assist[bot]' && github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: write
       pull-requests: write
-      id-token: write
       issues: write
 
     steps:
@@ -35,11 +34,19 @@ jobs:
 
             ## 手順
 
-            1. **レビューコメントを取得する**
+            1. **レビュー内容を取得する**
+
+               レビュー本体（総評）を取得する:
+               ```
+               gh api repos/${{ github.repository }}/pulls/reviews/${{ github.event.review.id }}
+               ```
+
+               インラインコメントを取得する:
                ```
                gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments
                ```
-               Gemini からのコメント（`user.login` が `gemini-code-assist[bot]`）のみを対象にする。
+               `user.login` が `gemini-code-assist[bot]` のコメントのみを対象にする。
+               コメントが 0 件かつレビュー本体も空の場合は何もせず終了する。
 
             2. **各コメントを評価する**
                - 指摘が正当かどうか判断する
@@ -49,36 +56,38 @@ jobs:
             3. **コードを修正した場合**
                - 変更をコミット・プッシュする（コミットメッセージは Conventional Commits 形式）
                - コミットフッターに `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>` を付ける
+               ```
+               git add -A
+               git commit -m "fix: <修正内容>\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+               git push origin HEAD
+               ```
 
             4. **各コメントに返信する**
                対応した場合:
                ```
-               gh api repos/${{ github.repository }}/pulls/comments/{comment_id}/replies \
-                 -f body="対応しました。{修正内容の説明}"
+               gh api repos/${{ github.repository }}/pulls/comments/<comment_id>/replies \
+                 -f body="対応しました。<修正内容の説明>"
                ```
                対応しない場合:
                ```
-               gh api repos/${{ github.repository }}/pulls/comments/{comment_id}/replies \
-                 -f body="この実装は意図的です。{理由}"
+               gh api repos/${{ github.repository }}/pulls/comments/<comment_id>/replies \
+                 -f body="この実装は意図的です。<理由>"
                ```
+               `<comment_id>` は手順 1 で取得した各コメントの `id` フィールドの値を使うこと。
 
             5. **全スレッドを Resolved にする**
-               GraphQL で各スレッドを resolve する:
+
+               まず owner と name を取得する:
                ```
-               gh api graphql -f query='
-                 mutation {
-                   resolveReviewThread(input: {threadId: "{thread_id}"}) {
-                     thread { isResolved }
-                   }
-                 }
-               '
+               gh repo view ${{ github.repository }} --json owner,name
                ```
-               スレッド ID は以下で取得できる:
+
+               スレッド ID を取得する（取得した owner と name を使う）:
                ```
-               gh api graphql -f query='
-                 query {
-                   repository(owner: "{owner}", name: "{name}") {
-                     pullRequest(number: ${{ github.event.pull_request.number }}) {
+               gh api graphql -F owner=<owner> -F name=<name> -F pr=${{ github.event.pull_request.number }} -f query='
+                 query($owner: String!, $name: String!, $pr: Int!) {
+                   repository(owner: $owner, name: $name) {
+                     pullRequest(number: $pr) {
                        reviewThreads(first: 50) {
                          nodes { id isResolved }
                        }
@@ -88,4 +97,20 @@ jobs:
                '
                ```
 
-          claude_args: --max-turns 20 --allowedTools "Read,Edit,Write,Bash(git *),Bash(gh api *),Bash(gh pr *)"
+               未解決のスレッドをそれぞれ resolve する（`<thread_id>` を各ノードの `id` に置き換える）:
+               ```
+               gh api graphql -F threadId=<thread_id> -f query='
+                 mutation($threadId: ID!) {
+                   resolveReviewThread(input: {threadId: $threadId}) {
+                     thread { isResolved }
+                   }
+                 }
+               '
+               ```
+
+          claude_args: >-
+            --max-turns 20
+            --allowedTools "Read,Edit,Write,
+            Bash(git add *),Bash(git commit *),Bash(git push origin HEAD),
+            Bash(gh api repos/* ),Bash(gh api graphql *),Bash(gh repo view *),
+            Bash(gh pr view *)"

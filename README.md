@@ -290,6 +290,8 @@ gh secret set ANTHROPIC_API_KEY --repo Kaaaaazuya/claude-config
 
 ### 注意
 
-- Draft PR では動作しない（`pull_request.draft == false` 条件のため）。
+- Draft PR では動作しない（`pull_request.draft != true` 条件のため）。
 - `gemini-code-assist[bot]` 以外のレビュアーには反応しない。
+- Gemini が Approve のみ（インラインコメントなし・レビュー本体も空）の場合もトリガーされるが、コメントが 0 件なら Claude は何もせず終了する。
 - Claude による修正コミットは PR ブランチに直接プッシュされる（`contents: write` 権限が必要）。
+- コピー先リポジトリで Actions に `contents: write` と `pull-requests: write` が付与されていることを確認する（Organization によっては制限されていることがある。Settings → Actions → General → Workflow permissions で「Read and write permissions」を選択）。
